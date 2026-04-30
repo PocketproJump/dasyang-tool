@@ -408,11 +408,43 @@ function applyAiData(d){
     d.pantone_colors.forEach(p=>addPantone(p.name||'',p.hex||'#888888'));
   }
 
-  // 替換輔料
+  // 替換輔料（含 AI 切出來的圖片）
   if(d.accessories && d.accessories.length>0){
     document.getElementById('acList').innerHTML='';
     acIdx=0;
-    d.accessories.forEach(a=>addAcc(a.name||'',a.detail||'',''));
+    d.accessories.forEach((a,idx)=>{
+      addAcc(a.name||'',a.detail||'',a.color_hex||'');
+      // AI 自動切的輔料圖片塞進 imgData 跟預覽
+      if(a.image){
+        imgData['acc_'+idx] = a.image;
+        const pv = document.getElementById('apv_'+idx);
+        if(pv){pv.src=a.image;pv.style.display='block';}
+        const fn = document.getElementById('afn_'+idx);
+        if(fn){fn.textContent='✨ AI 切圖';fn.style.color='#6c47d4';}
+      }
+    });
+  }
+
+  // ── AI 自動切出來的圖像區塊 ──
+  // 後端 region key (長名) → HTML 上的 imgData key (短名)
+  if(d.cropped_regions){
+    const keyMap = {
+      bag_image:        'bag',
+      front_open_image: 'open',
+      front_fold_image: 'fold',
+      cut_layout_image: 'cut',
+      pattern_image:    'pattern',
+      lining_image:     'lining',
+    };
+    for(const [longKey, dataUrl] of Object.entries(d.cropped_regions)){
+      if(!dataUrl) continue;
+      const shortKey = keyMap[longKey]; if(!shortKey) continue;
+      imgData[shortKey] = dataUrl;
+      const pv = document.getElementById('pv_'+shortKey);
+      if(pv){pv.src=dataUrl;pv.style.display='block';}
+      const fn = document.getElementById('fn_'+shortKey);
+      if(fn){fn.textContent='✨ AI 切圖';fn.style.color='#6c47d4';}
+    }
   }
 
   // 捲動到表單

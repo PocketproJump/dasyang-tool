@@ -84,6 +84,34 @@ def hex2rgb(h, fb=(180,180,180)):
     try: h=h.lstrip("#"); return tuple(int(h[i:i+2],16) for i in (0,2,4))
     except: return fb
 
+def _crop_to_data_url(src_img, box_2d, *, jpeg_quality=88, pad_ratio=0.02):
+    """把 Gemini 回傳的 box_2d ([ymin,xmin,ymax,xmax] 0-1000) 轉換為 cropped data URL。
+    無效座標回傳 None。pad_ratio 給每邊 2% 的安全留白。"""
+    if not box_2d or not isinstance(box_2d, (list, tuple)) or len(box_2d) != 4:
+        return None
+    try:
+        ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
+    except (ValueError, TypeError):
+        return None
+    if ymin >= ymax or xmin >= xmax:
+        return None
+    W, H = src_img.size
+    pad_x = (xmax - xmin) * pad_ratio
+    pad_y = (ymax - ymin) * pad_ratio
+    left   = max(0, int((xmin - pad_x) / 1000.0 * W))
+    upper  = max(0, int((ymin - pad_y) / 1000.0 * H))
+    right  = min(W, int((xmax + pad_x) / 1000.0 * W))
+    lower  = min(H, int((ymax + pad_y) / 1000.0 * H))
+    if right - left < 5 or lower - upper < 5:
+        return None
+    try:
+        cropped = src_img.crop((left, upper, right, lower))
+    except Exception:
+        return None
+    buf = io.BytesIO()
+    cropped.save(buf, format="JPEG", quality=jpeg_quality)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
 def load_img(data_or_path, size, label=""):
     img = None
     try:
@@ -620,24 +648,46 @@ def analyze_route():
 
         prompt = (
             "你是一個專業的產品設計稿分析助手。請仔細分析這張設計稿圖片，"
-            "提取所有可見的產品資訊，以純 JSON 格式回傳（不要加 markdown 代碼塊或任何說明文字）：\n\n"
+            "做兩件事，以純 JSON 回傳（不要 markdown）：\n\n"
+            "==== 任務 1：抽取文字資訊 ====\n"
             "{\n"
-            '  "material": "材質（如：Polyester、最新三分格）",\n'
-            '  "print_method": "印刷方式（如：數位印）",\n'
-            '  "fold_note": "收攝相關備註",\n'
+            '  "material": "材質（如：Polyester；找不到留空）",\n'
+            '  "print_method": "印刷方式（如：數位印；設計稿沒明寫就空字串，不要推測）",\n'
+            '  "fold_note": "收摺/收納相關備註",\n'
             '  "bottom_wrap_pantone": "底部或主要包圍布料的Pantone色號",\n'
-            '  "bottom_wrap_color_hex": "#XXXXXX（底部顏色的近似hex）",\n'
-            '  "lining_note": "內裏備註（如：不可裂開）",\n'
-            '  "pantone_colors": [\n'
-            '    {"name": "Pantone XXXC", "hex": "#XXXXXX"}\n'
-            '  ],\n'
-            '  "accessories": [\n'
-            '    {"name": "輔料名稱：", "detail": "備註或色號（若無則空字串）"}\n'
-            '  ]\n'
+            '  "bottom_wrap_color_hex": "#XXXXXX",\n'
+            '  "lining_note": "內裏備註",\n'
+            '  "pantone_colors": [...],   // ⚠ 見下方規則\n'
+            '  "accessories": [...]        // ⚠ 見下方規則\n'
             "}\n\n"
-            "注意：pantone_colors 列出圖中所有可見的Pantone色號；"
-            "accessories 包含拉鍊、織帶、拉牌、LOGO標、織標、水洗標等；"
-            "找不到的欄位填空字串；只回傳 JSON。"
+            "▎pantone_colors 規則：\n"
+            "  列出設計稿上**所有觀察到的明顯主色**（包含袋身底色、印花上的點/圖案色、配件顏色等），"
+            "  至少 3 個、最多 7 個。每個物件：\n"
+            '  {"name": "Pantone XXXC", "hex": "#RRGGBB"}\n'
+            "  - hex 從圖上抽近似值\n"
+            "  - name 推測對應 Pantone 色號（不確定也要給最接近的，可加 \"(推測)\"）\n"
+            "  - 不要遺漏明顯顏色（如背景白、印花亮黃、Logo 紅等）\n\n"
+            "▎accessories 規則：\n"
+            "  列出設計稿上能看到的所有配件（拉鍊頭/織帶、拉牌、LOGO反光標、織標、吊牌、水洗標等）。\n"
+            '  每個物件：{"name": "輔料名稱", "detail": "備註或色號", "box_2d": [ymin,xmin,ymax,xmax] or null}\n\n'
+            "==== 任務 2：定位設計稿上的「圖像區塊」====\n"
+            "請額外回傳 regions 欄位，標出下列各圖像區塊在設計稿上的位置（座標格式見下）：\n"
+            "{\n"
+            '  "regions": {\n'
+            '    "bag_image":        {"box_2d": [...]} or null,  // 袋子整體外觀展示圖（含完整商品造型）\n'
+            '    "front_open_image": {"box_2d": [...]} or null,  // 袋子展開狀態的正面圖\n'
+            '    "front_fold_image": {"box_2d": [...]} or null,  // 袋子收摺狀態的正面圖\n'
+            '    "cut_layout_image": {"box_2d": [...]} or null,  // 裁片版型/打版圖\n'
+            '    "pattern_image":    {"box_2d": [...]} or null,  // 循環印花/滿版花紋圖\n'
+            '    "lining_image":     {"box_2d": [...]} or null   // 內裏布料圖\n'
+            "  }\n"
+            "}\n\n"
+            "▎box_2d 座標格式（嚴格遵守）：\n"
+            "  [ymin, xmin, ymax, xmax]，所有值標準化到 0-1000 整數。\n"
+            "  ymin/xmin 為左上角，ymax/xmax 為右下角。\n"
+            "  座標基準是「整張設計稿圖片」（左上角=0,0；右下角=1000,1000）。\n"
+            "  不存在的區塊請設為 null（不要瞎猜）。\n"
+            "  寧可框大一點（含周圍留白）也不要切到主體。\n"
         )
 
         payload = {
@@ -682,6 +732,33 @@ def analyze_route():
                 raw = raw[4:].lstrip()
         raw = raw.replace("```", "").strip()
         parsed = json.loads(raw)
+
+        # ── 任務 2：根據 Gemini 回傳的 box_2d，PIL 切出每個區塊 ──
+        try:
+            src_bytes = base64.b64decode(img_b64)
+            src_img = Image.open(io.BytesIO(src_bytes)).convert("RGB")
+        except Exception as e:
+            # 切圖失敗不影響主流程，把 JSON 直接回去
+            parsed["_crop_error"] = f"原圖解碼失敗：{e}"
+            return jsonify(parsed)
+
+        cropped_regions = {}
+        for key in ("bag_image", "front_open_image", "front_fold_image",
+                    "cut_layout_image", "pattern_image", "lining_image"):
+            region = (parsed.get("regions") or {}).get(key)
+            if isinstance(region, dict):
+                data_url = _crop_to_data_url(src_img, region.get("box_2d"))
+                if data_url:
+                    cropped_regions[key] = data_url
+        parsed["cropped_regions"] = cropped_regions
+
+        # 輔料圖片：把 box_2d 切出來，存到該 accessory 的 image 欄位
+        for acc in parsed.get("accessories") or []:
+            if isinstance(acc, dict):
+                data_url = _crop_to_data_url(src_img, acc.get("box_2d"))
+                if data_url:
+                    acc["image"] = data_url
+
         return jsonify(parsed)
 
     except _urllib_err.HTTPError as e:
