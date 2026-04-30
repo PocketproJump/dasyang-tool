@@ -566,23 +566,22 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze_route():
-    """接收圖片 + API Key，呼叫 Claude 視覺 API 分析設計稿，回傳 JSON"""
+    """接收圖片 + API Key，呼叫 MiniMax 視覺 API 分析設計稿，回傳 JSON"""
+    raw = ""
     try:
-        import anthropic as _anthropic
+        import urllib.request as _urllib_req
 
         # 優先使用伺服器環境變數（部署版），其次使用前端傳入的 Key（本機版）
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip() \
+        api_key = os.environ.get("MINIMAX_API_KEY", "").strip() \
                   or request.headers.get("X-Api-Key", "").strip()
         if not api_key:
-            return jsonify({"error": "缺少 API Key（請在 Render 環境變數設定 ANTHROPIC_API_KEY）"}), 400
+            return jsonify({"error": "缺少 API Key（請在 Render 環境變數設定 MINIMAX_API_KEY）"}), 400
 
         data = request.get_json()
         img_b64   = data.get("image_b64", "")
         img_type  = data.get("image_type", "image/jpeg")
         if not img_b64:
             return jsonify({"error": "缺少圖片資料"}), 400
-
-        client = _anthropic.Anthropic(api_key=api_key)
 
         prompt = (
             "你是一個專業的產品設計稿分析助手。請仔細分析這張設計稿圖片，"
@@ -606,22 +605,40 @@ def analyze_route():
             "找不到的欄位填空字串；只回傳 JSON。"
         )
 
-        msg = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=1500,
-            messages=[{
+        payload = {
+            "model": "MiniMax-VL-01",
+            "messages": [{
                 "role": "user",
                 "content": [
-                    {"type": "image",
-                     "source": {"type": "base64",
-                                "media_type": img_type,
-                                "data": img_b64}},
-                    {"type": "text", "text": prompt}
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{img_type};base64,{img_b64}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
                 ]
-            }]
+            }],
+            "max_tokens": 1500
+        }
+
+        req = _urllib_req.Request(
+            "https://api.minimax.chat/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
         )
 
-        raw = msg.content[0].text.strip()
+        with _urllib_req.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read())
+
+        raw = result["choices"][0]["message"]["content"].strip()
         # 容錯：移除可能的 ```json 包裝
         raw = raw.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(raw)
