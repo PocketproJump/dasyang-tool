@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dasyang-tool
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_dasyang:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
