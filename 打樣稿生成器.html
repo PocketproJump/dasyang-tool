@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>打樣稿生成器</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei","Segoe UI",sans-serif;background:#f0f2f5;color:#1a1a1a}
+header{background:#d22333;color:#fff;padding:18px 32px;display:flex;align-items:center;gap:14px}
+header h1{font-size:22px;font-weight:700}
+header p{font-size:13px;opacity:.85;margin-top:2px}
+.wrap{max-width:1000px;margin:28px auto;padding:0 20px 60px}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden}
+.card-head{background:#f7f8fa;border-bottom:1px solid #eee;padding:13px 22px;font-weight:700;font-size:15px;color:#333;display:flex;align-items:center;gap:8px}
+.badge{background:#d22333;color:#fff;border-radius:20px;padding:2px 10px;font-size:12px}
+.badge-ai{background:#6c47d4;color:#fff;border-radius:20px;padding:2px 10px;font-size:12px}
+.card-body{padding:20px 22px}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.field{flex:1;min-width:180px}
+label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:5px}
+input[type=text],input[type=password]{width:100%;border:1px solid #ddd;border-radius:7px;padding:8px 11px;font-size:14px;font-family:inherit;transition:border .2s}
+input[type=text]:focus,input[type=password]:focus{outline:none;border-color:#6c47d4}
+input[type=color]{width:44px;height:36px;padding:2px 3px;border:1px solid #ddd;border-radius:7px;cursor:pointer}
+.upload-box{border:2px dashed #ddd;border-radius:8px;padding:14px 8px;text-align:center;cursor:pointer;background:#fafafa;position:relative;transition:.2s}
+.upload-box:hover{border-color:#d22333;background:#fff5f5}
+.upload-box.ai-drop:hover{border-color:#6c47d4;background:#f5f0ff}
+.upload-box input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-box .icon{font-size:24px;pointer-events:none}
+.upload-box .lbl{font-size:11px;color:#888;margin-top:3px;pointer-events:none}
+.upload-box .fname{font-size:11px;color:#d22333;font-weight:600;margin-top:3px;word-break:break-all;pointer-events:none}
+.pv{max-width:100%;max-height:80px;border-radius:5px;margin-top:6px;object-fit:contain;display:none}
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.pt-row{display:flex;gap:8px;align-items:center;background:#f9f9f9;border-radius:8px;padding:9px 12px;margin-bottom:8px}
+.pt-row input[type=text]{flex:1}
+.ac-row{display:flex;gap:8px;align-items:center;background:#f9f9f9;border-radius:8px;padding:9px 12px;margin-bottom:8px;flex-wrap:wrap}
+.ac-row .ac-name{flex:2;min-width:120px}
+.ac-row .ac-detail{flex:2;min-width:100px}
+.ac-row .ac-img{flex:0 0 90px}
+.btn-add{width:100%;border:1.5px dashed #bbb;background:none;color:#888;border-radius:7px;padding:8px;font-size:13px;cursor:pointer;margin-top:4px;font-family:inherit}
+.btn-add:hover{border-color:#d22333;color:#d22333}
+.del-btn{background:none;border:none;color:#ccc;font-size:18px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0}
+.del-btn:hover{color:#d22333}
+.gen-btn{width:100%;padding:16px;background:#d22333;color:#fff;border:none;border-radius:10px;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:4px}
+.gen-btn:hover{background:#b51c2a}
+.gen-btn:disabled{background:#bbb;cursor:not-allowed}
+.ai-btn{width:100%;padding:13px;background:#6c47d4;color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;transition:.2s}
+.ai-btn:hover{background:#5538b0}
+.ai-btn:disabled{background:#bbb;cursor:not-allowed}
+.spin{width:20px;height:20px;border:3px solid #fff4;border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+#resultArea{display:none;margin-top:28px;text-align:center}
+#resultArea img{max-width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
+.dl-btn{display:inline-block;margin-top:16px;background:#1a7a3b;color:#fff;padding:12px 36px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;font-family:inherit}
+.ai-status{margin-top:10px;padding:10px 14px;border-radius:7px;font-size:13px;display:none}
+.ai-status.ok{background:#eafaf1;color:#1a7a3b;border:1px solid #b2dfca;display:block}
+.ai-status.err{background:#fdf0f0;color:#c0392b;border:1px solid #f5c6c6;display:block}
+.ai-status.loading{background:#f3f0ff;color:#6c47d4;border:1px solid #d4c6f5;display:block}
+.auto-filled{border-color:#6c47d4 !important;background:#faf7ff !important}
+.api-key-wrap{display:flex;gap:8px;align-items:flex-end}
+.api-key-wrap input{flex:1}
+.save-key-btn{padding:8px 14px;background:#6c47d4;color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer;white-space:nowrap;font-family:inherit}
+.save-key-btn:hover{background:#5538b0}
+.key-hint{font-size:12px;color:#888;margin-top:6px}
+.ai-preview-img{max-width:100%;max-height:200px;border-radius:8px;margin-top:10px;object-fit:contain;display:none;border:1px solid #eee}
+</style>
+</head>
+<body>
+<header>
+  <div style="font-size:32px">📋</div>
+  <div><h1>打樣稿生成器</h1><p>上傳設計稿 → AI 自動辨識填入 → 一鍵下載打樣稿 JPG</p></div>
+</header>
+
+<div class="wrap">
+
+  <!-- API Key 設定 -->
+  <div class="card" id="apiCard">
+    <div class="card-head"><span class="badge-ai">AI</span>Claude API 設定 <span style="font-size:12px;color:#999;font-weight:400;margin-left:4px">— 用於自動分析設計稿</span></div>
+    <div class="card-body">
+      <div class="api-key-wrap">
+        <div class="field">
+          <label>Anthropic API Key</label>
+          <input type="password" id="apiKey" placeholder="sk-ant-api03-...">
+        </div>
+        <button class="save-key-btn" onclick="saveKey()">儲存</button>
+      </div>
+      <div class="key-hint">API Key 僅存在本機記憶體，不會上傳。取得方式：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#6c47d4">console.anthropic.com</a></div>
+      <div id="keyStatus" style="margin-top:6px;font-size:13px"></div>
+    </div>
+  </div>
+
+  <!-- AI 自動分析設計稿 -->
+  <div class="card">
+    <div class="card-head"><span class="badge-ai">AI</span>第一步：上傳設計稿自動辨識</div>
+    <div class="card-body">
+      <div class="upload-box ai-drop" style="max-width:320px" id="ai-upload-box">
+        <input type="file" accept="image/*" onchange="handleAiImg(this)" id="ai-file-input">
+        <div class="icon">🤖</div>
+        <div class="lbl" id="ai-upload-lbl">點擊或拖曳設計稿圖片</div>
+        <div class="fname" id="ai-fname"></div>
+        <img class="ai-preview-img" id="ai-preview">
+      </div>
+      <button class="ai-btn" id="aiBtn" onclick="analyzeDesign()" disabled>
+        <div class="spin" id="aiSpin"></div>
+        <span id="aiBtnTxt">✨ AI 自動辨識並填入資料</span>
+      </button>
+      <div class="ai-status" id="aiStatus"></div>
+    </div>
+  </div>
+
+  <!-- 基本資訊 -->
+  <div class="card">
+    <div class="card-head"><span class="badge">基本</span>產品基本資訊</div>
+    <div class="card-body">
+      <div class="row">
+        <div class="field"><label>輸出檔名</label><input type="text" id="output_name" value="打樣稿_output"></div>
+        <div class="field"><label>打樣要求</label><input type="text" id="sample_req" value="包包樣x2"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>材質</label><input type="text" id="material" placeholder="最新三分格"></div>
+        <div class="field"><label>印刷方式</label><input type="text" id="print_method" placeholder="數位印"></div>
+        <div class="field"><label>收攝備註</label><input type="text" id="fold_note" placeholder="收攝後"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 欄1+2 圖片 -->
+  <div class="card">
+    <div class="card-head"><span class="badge">欄1-2</span>袋形示意 ＋ 印刷裁片圖片</div>
+    <div class="card-body">
+      <div class="row" style="margin-bottom:16px">
+        <div class="field" style="flex:0 0 220px"><label>底部包圍 Pantone 名稱</label><input type="text" id="wrap_pantone" value="Pantone 187C"></div>
+        <div class="field" style="flex:0 0 80px"><label>底部顏色</label><input type="color" id="wrap_color" value="#A8263B"></div>
+      </div>
+      <div class="upload-grid">
+        <div><label>袋形示意圖</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'bag')">
+          <div class="icon">🖼️</div><div class="lbl">袋形圖片</div>
+          <div class="fname" id="fn_bag"></div><img class="pv" id="pv_bag"></div></div>
+        <div><label>展開前幅</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'open')">
+          <div class="icon">📐</div><div class="lbl">展開前幅</div>
+          <div class="fname" id="fn_open"></div><img class="pv" id="pv_open"></div></div>
+        <div><label>收折前幅</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'fold')">
+          <div class="icon">📐</div><div class="lbl">收折前幅</div>
+          <div class="fname" id="fn_fold"></div><img class="pv" id="pv_fold"></div></div>
+        <div><label>版型裁片圖（選填）</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'cut')">
+          <div class="icon">✂️</div><div class="lbl">版型圖</div>
+          <div class="fname" id="fn_cut"></div><img class="pv" id="pv_cut"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 欄3 Pattern + Pantone -->
+  <div class="card">
+    <div class="card-head"><span class="badge">欄3</span>其餘 Pattern ＋ Pantone 色票</div>
+    <div class="card-body">
+      <div class="upload-grid" style="margin-bottom:18px">
+        <div><label>循環印花 Pattern</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'pattern')">
+          <div class="icon">🎨</div><div class="lbl">Pattern</div>
+          <div class="fname" id="fn_pattern"></div><img class="pv" id="pv_pattern"></div></div>
+        <div><label>內裏圖片（選填）</label>
+          <div class="upload-box"><input type="file" accept="image/*" onchange="handleImg(this,'lining')">
+          <div class="icon">🏷️</div><div class="lbl">內裏</div>
+          <div class="fname" id="fn_lining"></div><img class="pv" id="pv_lining"></div></div>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end">
+          <label>內裏備註</label><input type="text" id="lining_note" value="不可裂開"></div>
+      </div>
+      <label style="display:block;margin-bottom:10px">Pantone 色票（最多 7 個）</label>
+      <div id="ptList"></div>
+      <button class="btn-add" onclick="addPantone()">＋ 新增色票</button>
+    </div>
+  </div>
+
+  <!-- 欄4 輔料 -->
+  <div class="card">
+    <div class="card-head"><span class="badge">欄4</span>輔料（最多 5 項）</div>
+    <div class="card-body">
+      <div id="acList"></div>
+      <button class="btn-add" onclick="addAcc()">＋ 新增輔料</button>
+    </div>
+  </div>
+
+  <!-- 欄5 設計稿 -->
+  <div class="card">
+    <div class="card-head"><span class="badge">欄5</span>設計稿</div>
+    <div class="card-body">
+      <div class="upload-box" style="max-width:200px">
+        <input type="file" accept="image/*" onchange="handleImg(this,'design')" id="design-input">
+        <div class="icon">📄</div><div class="lbl">設計稿圖片</div>
+        <div class="fname" id="fn_design"></div><img class="pv" id="pv_design">
+      </div>
+    </div>
+  </div>
+
+  <button class="gen-btn" id="genBtn" onclick="generate()">
+    <div class="spin" id="spin"></div>
+    <span id="btnTxt">🖨️ 生成打樣稿</span>
+  </button>
+
+  <div id="resultArea">
+    <img id="resultImg" src="" alt="打樣稿預覽">
+    <br>
+    <a id="dlBtn" class="dl-btn">⬇ 下載 JPG</a>
+  </div>
+</div>
+
+<canvas id="cvs" style="display:none"></canvas>
+
+<script>
+// ── API Key ───────────────────────────────────────────────────────────
+let _apiKey = '';
+function saveKey(){
+  _apiKey = document.getElementById('apiKey').value.trim();
+  if(_apiKey.startsWith('sk-ant')){
+    document.getElementById('keyStatus').innerHTML='<span style="color:#1a7a3b">✅ API Key 已儲存，可開始使用 AI 辨識</span>';
+    document.getElementById('apiCard').style.borderColor='#b2dfca';
+    if(_aiImageData) document.getElementById('aiBtn').disabled=false;
+  } else {
+    document.getElementById('keyStatus').innerHTML='<span style="color:#c0392b">❌ 格式不對，請確認 Key 開頭為 sk-ant</span>';
+  }
+}
+
+// ── 圖片資料 ──────────────────────────────────────────────────────────
+const imgData = {};
+let _aiImageData = null;
+let _aiImageB64 = null;
+let _aiImageType = 'image/jpeg';
+
+function handleImg(input, key){
+  const file=input.files[0]; if(!file)return;
+  document.getElementById('fn_'+key).textContent=file.name;
+  const r=new FileReader();
+  r.onload=e=>{imgData[key]=e.target.result;const pv=document.getElementById('pv_'+key);pv.src=e.target.result;pv.style.display='block';};
+  r.readAsDataURL(file);
+}
+
+function handleAiImg(input){
+  const file=input.files[0]; if(!file)return;
+  _aiImageType = file.type||'image/jpeg';
+  document.getElementById('ai-fname').textContent=file.name;
+  document.getElementById('ai-upload-lbl').textContent='設計稿已載入';
+  const r=new FileReader();
+  r.onload=e=>{
+    _aiImageData=e.target.result;
+    _aiImageB64=e.target.result.split(',')[1];
+    const pv=document.getElementById('ai-preview');
+    pv.src=e.target.result; pv.style.display='block';
+    // 同時填入設計稿欄
+    imgData['design']=e.target.result;
+    document.getElementById('fn_design').textContent=file.name;
+    const dpv=document.getElementById('pv_design');
+    dpv.src=e.target.result; dpv.style.display='block';
+    if(_apiKey) document.getElementById('aiBtn').disabled=false;
+  };
+  r.readAsDataURL(file);
+}
+
+function handleAccImg(input,i){
+  const file=input.files[0];if(!file)return;
+  document.getElementById('afn_'+i).textContent=file.name;
+  const r=new FileReader();
+  r.onload=e=>{imgData['acc_'+i]=e.target.result;const pv=document.getElementById('apv_'+i);pv.src=e.target.result;pv.style.display='block';};
+  r.readAsDataURL(file);
+}
+
+// ── Pantone ───────────────────────────────────────────────────────────
+let ptIdx=0;
+const PT_DEF=[{n:'Pantone 7594C',h:'#5C3A2E'},{n:'Pantone 474C',h:'#F5D9B0'},{n:'Pantone 185C',h:'#E31837'},{n:'Pantone BlakC',h:'#231F20'},{n:'Pantone 187C',h:'#A8263B'}];
+function addPantone(n='',h='#888888'){
+  const i=ptIdx++,d=document.createElement('div');
+  d.className='pt-row';d.id='pt_'+i;
+  d.innerHTML=`<input type="color" id="ph_${i}" value="${h}"><input type="text" id="pn_${i}" placeholder="Pantone XXXC" value="${n}"><button class="del-btn" onclick="document.getElementById('pt_${i}').remove()">✕</button>`;
+  document.getElementById('ptList').appendChild(d);
+}
+PT_DEF.forEach(p=>addPantone(p.n,p.h));
+
+// ── 輔料 ─────────────────────────────────────────────────────────────
+let acIdx=0;
+const AC_DEF=[{n:'拉鍊、織帶：',d:'Pantone 7594C',h:'#5C3A2E'},{n:'拉牌：',d:'',h:''},{n:'murmurLOGO反光標',d:'',h:''},{n:'織標(授權(C)2026)',d:'',h:''},{n:'水洗標',d:'',h:''}];
+function addAcc(n='',d='',h=''){
+  if(acIdx>=5){alert('最多5項');return;}
+  const i=acIdx++,row=document.createElement('div');
+  row.className='ac-row';row.id='ac_'+i;
+  row.innerHTML=`<span style="color:#aaa;font-size:13px;flex-shrink:0">${i+1}.</span>
+    <input type="text" class="ac-name" id="an_${i}" placeholder="輔料名稱" value="${n}">
+    <input type="text" class="ac-detail" id="ad_${i}" placeholder="備註/色號" value="${d}">
+    <input type="color" style="width:36px;height:34px;border-radius:6px;border:1px solid #ddd;cursor:pointer;flex-shrink:0" id="ah_${i}" value="${h||'#888888'}">
+    <div class="ac-img"><div class="upload-box" style="padding:8px 4px"><input type="file" accept="image/*" onchange="handleAccImg(this,${i})">
+    <div class="icon" style="font-size:18px">🖼️</div><div class="lbl">圖片</div>
+    <div class="fname" id="afn_${i}" style="font-size:10px"></div>
+    <img class="pv" id="apv_${i}" style="max-height:50px"></div></div>
+    <button class="del-btn" onclick="document.getElementById('ac_${i}').remove()">✕</button>`;
+  document.getElementById('acList').appendChild(row);
+}
+AC_DEF.forEach(a=>addAcc(a.n,a.d,a.h));
+
+// ── 偵測是否在伺服器上運行 ────────────────────────────────────────────
+const IS_SERVER = !window.location.protocol.startsWith('file') &&
+                  !window.location.hostname.includes('localhost') &&
+                  !window.location.hostname.includes('127.0.0.1');
+
+// 若在伺服器上，隱藏 API Key 區塊（由伺服器統一管理）
+window.addEventListener('DOMContentLoaded', ()=>{
+  if(IS_SERVER){
+    const card = document.getElementById('apiCard');
+    if(card) card.style.display='none';
+    document.getElementById('aiBtn').disabled = false;
+    _apiKey = 'server'; // 佔位，實際 key 在伺服器
+  }
+});
+
+// ── AI 分析（自動選擇：伺服器路由 or 直接 API）────────────────────────
+async function analyzeDesign(){
+  if(!IS_SERVER && !_apiKey){alert('請先填入 API Key 並按儲存');return;}
+  if(!_aiImageB64){alert('請先上傳設計稿圖片');return;}
+
+  const btn=document.getElementById('aiBtn');
+  btn.disabled=true;
+  document.getElementById('aiSpin').style.display='block';
+  document.getElementById('aiBtnTxt').textContent='AI 辨識中…';
+  const st=document.getElementById('aiStatus');
+  st.className='ai-status loading'; st.textContent='🔍 正在分析設計稿，請稍候（約 15-20 秒）…'; st.style.display='block';
+
+  try {
+    let parsed;
+
+    if(IS_SERVER){
+      // ── 部署版：呼叫伺服器 /analyze，Key 在伺服器環境變數 ──
+      const res = await fetch('/analyze',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({image_b64:_aiImageB64, image_type:_aiImageType})
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error||'伺服器錯誤 '+res.status);
+      parsed = data;
+
+    } else {
+      // ── 本機版：直接呼叫 Anthropic API ──
+      const prompt = '你是一個專業的產品設計稿分析助手。請仔細分析這張設計稿圖片，提取所有可見的產品資訊，以純 JSON 格式回傳（不要加 markdown 或說明）：\n{"material":"材質","print_method":"印刷方式","fold_note":"收攝備註","bottom_wrap_pantone":"底部Pantone色號","bottom_wrap_color_hex":"#XXXXXX","lining_note":"內裏備註","pantone_colors":[{"name":"Pantone XXXC","hex":"#XXXXXX"}],"accessories":[{"name":"輔料名稱：","detail":"備註或色號"}]}\n找不到的欄位填空字串，只回傳JSON。';
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':_apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
+        body: JSON.stringify({model:'claude-opus-4-6',max_tokens:1500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:_aiImageType,data:_aiImageB64}},{type:'text',text:prompt}]}]})
+      });
+      if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`HTTP ${res.status}`);}
+      const data=await res.json();
+      const raw=data.content[0].text.trim().replace(/^```json?\s*/,'').replace(/```$/,'').trim();
+      parsed=JSON.parse(raw);
+    }
+
+    applyAiData(parsed);
+    st.className='ai-status ok';
+    st.textContent='✅ 辨識完成！已自動填入資料，請確認後可手動調整。';
+
+  } catch(e){
+    let msg = e.message;
+    if(msg.includes('Failed to fetch')||msg.includes('Load failed'))
+      msg='無法連線，請確認網址是 http://localhost:5050（不能直接開 HTML 檔）';
+    st.className='ai-status err';
+    st.textContent='❌ 辨識失敗：'+msg;
+    console.error(e);
+  } finally {
+    btn.disabled=false;
+    document.getElementById('aiSpin').style.display='none';
+    document.getElementById('aiBtnTxt').textContent='✨ AI 自動辨識並填入資料';
+  }
+}
+
+function markFilled(id){
+  const el=document.getElementById(id);
+  if(el){el.classList.add('auto-filled');setTimeout(()=>el.classList.remove('auto-filled'),3000);}
+}
+
+function applyAiData(d){
+  function set(id,val){
+    if(!val)return;
+    const el=document.getElementById(id);
+    if(el){el.value=val;markFilled(id);}
+  }
+
+  set('material',       d.material);
+  set('print_method',   d.print_method);
+  set('fold_note',      d.fold_note);
+  set('wrap_pantone',   d.bottom_wrap_pantone);
+  set('lining_note',    d.lining_note);
+
+  if(d.bottom_wrap_color_hex && d.bottom_wrap_color_hex.startsWith('#')){
+    document.getElementById('wrap_color').value=d.bottom_wrap_color_hex;
+    markFilled('wrap_color');
+  }
+
+  // 替換 Pantone 色票
+  if(d.pantone_colors && d.pantone_colors.length>0){
+    document.getElementById('ptList').innerHTML='';
+    ptIdx=0;
+    d.pantone_colors.forEach(p=>addPantone(p.name||'',p.hex||'#888888'));
+  }
+
+  // 替換輔料
+  if(d.accessories && d.accessories.length>0){
+    document.getElementById('acList').innerHTML='';
+    acIdx=0;
+    d.accessories.forEach(a=>addAcc(a.name||'',a.detail||'',''));
+  }
+
+  // 捲動到表單
+  document.querySelector('.card:nth-child(3)').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── Canvas 繪圖 ───────────────────────────────────────────────────────
+function loadImgEl(src){return new Promise(res=>{if(!src){res(null);return;}const img=new Image();img.onload=()=>res(img);img.onerror=()=>res(null);img.src=src;});}
+function drawPlaceholder(ctx,x,y,w,h,label){ctx.fillStyle='#e5e5e5';ctx.fillRect(x,y,w,h);ctx.fillStyle='#aaa';ctx.font='13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label||'（無圖）',x+w/2,y+h/2);ctx.textAlign='left';ctx.textBaseline='top';}
+function drawFit(ctx,img,x,y,w,h){if(!img)return;const s=Math.min(w/img.naturalWidth,h/img.naturalHeight);const dw=img.naturalWidth*s,dh=img.naturalHeight*s;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
+function dt(ctx,txt,x,y,sz,col,bold=false){ctx.fillStyle=col;ctx.font=`${bold?700:400} ${sz}px "PingFang TC","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif`;ctx.textBaseline='top';ctx.textAlign='left';ctx.fillText(txt,x,y);}
+
+async function generate(){
+  const btn=document.getElementById('genBtn');
+  btn.disabled=true;document.getElementById('spin').style.display='block';document.getElementById('btnTxt').textContent='生成中…';
+  await new Promise(r=>setTimeout(r,60));
+  try{
+    const W=1700,H=510,BAR=58,MH=H-BAR,SW=Math.floor(W/5),PAD=14,HDR=36;
+    const CB='#0066BB',CR='#D22333',CD='#1e1e1e',CG='#646464',CDV='#d2d2d2';
+    const cvs=document.getElementById('cvs');cvs.width=W;cvs.height=H;
+    const ctx=cvs.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=CR;ctx.fillRect(0,MH,W,BAR);
+    ctx.font=`700 26px "PingFang TC","Microsoft JhengHei","Noto Sans TC",system-ui`;
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('打樣：'+(document.getElementById('sample_req').value||'包包樣x2'),W/2,MH+BAR/2);
+    ctx.textAlign='left';ctx.textBaseline='top';
+    for(let i=1;i<5;i++){ctx.strokeStyle=CDV;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(i*SW,0);ctx.lineTo(i*SW,MH);ctx.stroke();}
+    const el={};
+    for(const k of['bag','open','fold','cut','pattern','lining','design'])el[k]=await loadImgEl(imgData[k]);
+    for(let i=0;i<5;i++)el['acc_'+i]=await loadImgEl(imgData['acc_'+i]);
+
+    let X=0;
+    dt(ctx,'袋形示意：',X+PAD,8,21,CB,true);
+    const bagH=MH-HDR-65;ctx.fillStyle='#f0f0f0';ctx.fillRect(X+PAD,HDR,SW-2*PAD,bagH);
+    el.bag?drawFit(ctx,el.bag,X+PAD,HDR,SW-2*PAD,bagH):drawPlaceholder(ctx,X+PAD,HDR,SW-2*PAD,bagH,'袋形圖片');
+    const fn=document.getElementById('fold_note').value;if(fn)dt(ctx,fn,X+PAD,HDR+bagH+5,13,CG);
+    let ym=MH-52;dt(ctx,'材質：'+(document.getElementById('material').value||''),X+PAD,ym,16,CD);ym+=24;
+    dt(ctx,'印刷：'+(document.getElementById('print_method').value||''),X+PAD,ym,16,CD);
+
+    X=SW;
+    dt(ctx,'印刷裁片：',X+PAD,8,21,CB,true);dt(ctx,'─── 刀模線',X+178,10,13,CG);dt(ctx,'··· 車線',X+283,10,13,CG);
+    dt(ctx,'定位印：',X+PAD,HDR+2,16,CD);
+    const tw2=Math.floor((SW-3*PAD)/2),th=110,yt=HDR+24;
+    ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD,yt,tw2,th);el.open?drawFit(ctx,el.open,X+PAD,yt,tw2,th):drawPlaceholder(ctx,X+PAD,yt,tw2,th,'展開前幅');
+    ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD*2+tw2,yt,tw2,th);el.fold?drawFit(ctx,el.fold,X+PAD*2+tw2,yt,tw2,th):drawPlaceholder(ctx,X+PAD*2+tw2,yt,tw2,th,'收折前幅');
+    ctx.font=`400 13px "PingFang TC","Microsoft JhengHei",system-ui`;ctx.fillStyle=CG;ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText('展開前幅：',X+PAD+tw2/2,yt-16);ctx.fillText('收折前幅：',X+PAD*2+tw2+tw2/2,yt-16);ctx.textAlign='left';
+    const yw=yt+th+10;dt(ctx,'展開底部包圍＆拉桿背插、',X+PAD,yw,13,CD);dt(ctx,'收折包圍：',X+PAD,yw+18,13,CD);
+    const wh=document.getElementById('wrap_color').value;ctx.fillStyle=wh;ctx.fillRect(X+PAD,yw+38,130,18);
+    ctx.strokeStyle='#0002';ctx.lineWidth=1;ctx.strokeRect(X+PAD,yw+38,130,18);
+    dt(ctx,document.getElementById('wrap_pantone').value,X+PAD+140,yw+39,13,CD);
+    const yc=yw+65,chh=MH-yc-PAD;if(chh>30){ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD,yc,SW-2*PAD,chh);el.cut?drawFit(ctx,el.cut,X+PAD,yc,SW-2*PAD,chh):drawPlaceholder(ctx,X+PAD,yc,SW-2*PAD,chh,'版型圖');}
+
+    X=SW*2;const pw=Math.floor(SW/2)-PAD-5;
+    dt(ctx,'其餘Pattern:',X+PAD,8,21,CB,true);ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD,HDR,pw,160);
+    el.pattern?drawFit(ctx,el.pattern,X+PAD,HDR,pw,160):drawPlaceholder(ctx,X+PAD,HDR,pw,160,'Pattern');
+    dt(ctx,'內裏：',X+PAD,HDR+165,16,CB,true);ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD,HDR+190,pw,90);
+    el.lining?drawFit(ctx,el.lining,X+PAD,HDR+190,pw,90):drawPlaceholder(ctx,X+PAD,HDR+190,pw,90,'內裏');
+    const ln=document.getElementById('lining_note').value;if(ln)dt(ctx,'*'+ln,X+PAD,HDR+287,13,CR);
+    dt(ctx,'Pantone',X+SW/2+5,8,21,CD,true);
+    let py=HDR+4;
+    document.querySelectorAll('[id^=pt_]').forEach(row=>{const i=row.id.split('_')[1];const pn=document.getElementById('pn_'+i)?.value||'';const ph=document.getElementById('ph_'+i)?.value||'#888';if(!pn)return;ctx.fillStyle=ph;ctx.fillRect(X+SW/2+5,py,26,18);ctx.strokeStyle='#0003';ctx.lineWidth=1;ctx.strokeRect(X+SW/2+5,py,26,18);dt(ctx,pn,X+SW/2+36,py+1,13,CD);py+=30;});
+
+    X=SW*3;let ay=HDR+4,acNum=0;dt(ctx,'輔料：',X+PAD,8,21,CB,true);
+    document.querySelectorAll('[id^=ac_]').forEach(row=>{acNum++;const i=row.id.split('_')[1];const an=document.getElementById('an_'+i)?.value||'';const ad=document.getElementById('ad_'+i)?.value||'';const ah=document.getElementById('ah_'+i)?.value||'';if(!an)return;dt(ctx,acNum+'.'+an,X+PAD,ay,16,CD);ay+=22;if(ad){if(ah&&ah!='#888888'){ctx.fillStyle=ah;ctx.fillRect(X+PAD+10,ay,32,13);ctx.strokeStyle='#0002';ctx.lineWidth=1;ctx.strokeRect(X+PAD+10,ay,32,13);dt(ctx,ad,X+PAD+48,ay,13,CD);}else dt(ctx,ad,X+PAD+10,ay,13,CG);ay+=18;}const ai=el['acc_'+i];if(ai){ctx.fillStyle='#f0f0f0';ctx.fillRect(X+PAD,ay,SW-2*PAD,45);drawFit(ctx,ai,X+PAD,ay,SW-2*PAD,45);ay+=50;}ay+=4;});
+
+    X=SW*4;dt(ctx,'設計稿：',X+PAD,8,21,CB,true);ctx.fillStyle='#ebebeb';ctx.fillRect(X+PAD,HDR,SW-2*PAD,MH-HDR-PAD);
+    el.design?drawFit(ctx,el.design,X+PAD,HDR,SW-2*PAD,MH-HDR-PAD):drawPlaceholder(ctx,X+PAD,HDR,SW-2*PAD,MH-HDR-PAD,'設計稿');
+
+    cvs.toBlob(blob=>{const url=URL.createObjectURL(blob);const name=(document.getElementById('output_name').value||'打樣稿')+'.jpg';document.getElementById('resultImg').src=url;document.getElementById('dlBtn').href=url;document.getElementById('dlBtn').download=name;document.getElementById('resultArea').style.display='block';document.getElementById('resultArea').scrollIntoView({behavior:'smooth'});btn.disabled=false;document.getElementById('spin').style.display='none';document.getElementById('btnTxt').textContent='🖨️ 生成打樣稿';},'image/jpeg',0.95);
+  }catch(e){alert('錯誤：'+e.message);btn.disabled=false;document.getElementById('spin').style.display='none';document.getElementById('btnTxt').textContent='🖨️ 生成打樣稿';}
+}
+</script>
+</body>
+</html>
