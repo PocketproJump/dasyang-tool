@@ -2,8 +2,14 @@ services:
   - type: web
     name: dasyang-tool
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      mkdir -p fonts
+      curl -fsSL -o fonts/NotoSansTC-Regular.ttf \
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanstc/NotoSansTC%5Bwght%5D.ttf"
     startCommand: gunicorn web_dasyang:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: ANTHROPIC_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

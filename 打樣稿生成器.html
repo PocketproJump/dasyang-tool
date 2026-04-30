@@ -79,12 +79,12 @@ input[type=color]{width:44px;height:36px;padding:2px 3px;border:1px solid #ddd;b
     <div class="card-body">
       <div class="api-key-wrap">
         <div class="field">
-          <label>Anthropic API Key</label>
-          <input type="password" id="apiKey" placeholder="sk-ant-api03-...">
+          <label>Google Gemini API Key</label>
+          <input type="password" id="apiKey" placeholder="AIza...">
         </div>
         <button class="save-key-btn" onclick="saveKey()">儲存</button>
       </div>
-      <div class="key-hint">API Key 僅存在本機記憶體，不會上傳。取得方式：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#6c47d4">console.anthropic.com</a></div>
+      <div class="key-hint">API Key 僅存在本機記憶體，不會上傳。取得方式：<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#6c47d4">aistudio.google.com</a>（免費額度足夠）</div>
       <div id="keyStatus" style="margin-top:6px;font-size:13px"></div>
     </div>
   </div>
@@ -340,16 +340,23 @@ async function analyzeDesign(){
       parsed = data;
 
     } else {
-      // ── 本機版：直接呼叫 Anthropic API ──
+      // ── 本機版：直接呼叫 Google Gemini API ──
       const prompt = '你是一個專業的產品設計稿分析助手。請仔細分析這張設計稿圖片，提取所有可見的產品資訊，以純 JSON 格式回傳（不要加 markdown 或說明）：\n{"material":"材質","print_method":"印刷方式","fold_note":"收攝備註","bottom_wrap_pantone":"底部Pantone色號","bottom_wrap_color_hex":"#XXXXXX","lining_note":"內裏備註","pantone_colors":[{"name":"Pantone XXXC","hex":"#XXXXXX"}],"accessories":[{"name":"輔料名稱：","detail":"備註或色號"}]}\n找不到的欄位填空字串，只回傳JSON。';
-      const res = await fetch('https://api.anthropic.com/v1/messages',{
+      const model = 'gemini-2.5-flash';
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':_apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
-        body: JSON.stringify({model:'claude-opus-4-6',max_tokens:1500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:_aiImageType,data:_aiImageB64}},{type:'text',text:prompt}]}]})
+        headers:{'Content-Type':'application/json','x-goog-api-key':_apiKey},
+        body: JSON.stringify({
+          contents:[{parts:[
+            {inline_data:{mime_type:_aiImageType,data:_aiImageB64}},
+            {text:prompt}
+          ]}],
+          generationConfig:{responseMimeType:'application/json',maxOutputTokens:1500}
+        })
       });
       if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`HTTP ${res.status}`);}
       const data=await res.json();
-      const raw=data.content[0].text.trim().replace(/^```json?\s*/,'').replace(/```$/,'').trim();
+      const raw=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim().replace(/^```json?\s*/,'').replace(/```$/,'').trim();
       parsed=JSON.parse(raw);
     }
 

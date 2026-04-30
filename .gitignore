@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.venv/
+venv/
+
+# 本機測試輸出
+web_test_output.jpg
+
+# 範例圖片（不上傳，避免授權圖外洩）
+*.jpg
+*.jpeg
+*.png
+
+# 範例設定（含具體客戶資料）
+PEKO打樣稿設定.json
+打樣稿設定範本.json
+
+# 含敏感資訊的腳本一律不上傳
+deploy.command
+deploy2.command
+啟動打樣稿工具.command

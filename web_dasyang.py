@@ -13,9 +13,37 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB
 
 # ─── 字體 ────────────────────────────────────────────────────────────
-FONT_CJK   = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
-FONT_LATIN = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-FONT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+# 跨平台 fallback：macOS / Render(Debian/Ubuntu) / 任意 Linux 發行版
+def _first_existing(*paths):
+    for p in paths:
+        if p and os.path.exists(p):
+            return p
+    return None
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+FONT_CJK = _first_existing(
+    # repo 內字體（Render buildCommand 會下載到這裡）
+    os.path.join(_HERE, "fonts", "NotoSansTC-Regular.ttf"),
+    # macOS 開發
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    # Debian / Ubuntu 系統字體（如有 apt: fonts-noto-cjk）
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKtc-Regular.otf",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+)
+FONT_LATIN = _first_existing(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/Library/Fonts/Arial.ttf",
+) or FONT_CJK
+FONT_BOLD = _first_existing(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+) or FONT_LATIN
+
 _fc = {}
 
 def gf(size, bold=False):
@@ -28,7 +56,7 @@ def gf(size, bold=False):
 def gcjk(size):
     k = ("c", size)
     if k not in _fc:
-        try: _fc[k] = ImageFont.truetype(FONT_CJK, size)
+        try: _fc[k] = ImageFont.truetype(FONT_CJK, size) if FONT_CJK else gf(size)
         except: _fc[k] = ImageFont.load_default()
     return _fc[k]
 
@@ -566,22 +594,29 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze_route():
-    """接收圖片 + API Key，呼叫 MiniMax 視覺 API 分析設計稿，回傳 JSON"""
+    """接收設計稿圖片，呼叫 Google Gemini 視覺 API 分析，回傳 JSON。
+
+    部署版：API Key 來自環境變數 GEMINI_API_KEY
+    本機版（自架）：可透過 X-Api-Key header 帶 key
+    """
+    import urllib.request as _urllib_req
+    import urllib.error as _urllib_err
+
     raw = ""
     try:
-        import urllib.request as _urllib_req
-
-        # 優先使用伺服器環境變數（部署版），其次使用前端傳入的 Key（本機版）
-        api_key = os.environ.get("MINIMAX_API_KEY", "").strip() \
+        api_key = os.environ.get("GEMINI_API_KEY", "").strip() \
                   or request.headers.get("X-Api-Key", "").strip()
         if not api_key:
-            return jsonify({"error": "缺少 API Key（請在 Render 環境變數設定 MINIMAX_API_KEY）"}), 400
+            return jsonify({"error": "缺少 API Key（請在 Render 環境變數設定 GEMINI_API_KEY）"}), 400
 
         data = request.get_json()
         img_b64   = data.get("image_b64", "")
         img_type  = data.get("image_type", "image/jpeg")
         if not img_b64:
             return jsonify({"error": "缺少圖片資料"}), 400
+
+        # 模型可由環境變數覆寫，預設用 flash（快、便宜）
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
 
         prompt = (
             "你是一個專業的產品設計稿分析助手。請仔細分析這張設計稿圖片，"
@@ -606,44 +641,52 @@ def analyze_route():
         )
 
         payload = {
-            "model": "MiniMax-VL-01",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{img_type};base64,{img_b64}"
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
+            "contents": [{
+                "parts": [
+                    {"inline_data": {"mime_type": img_type, "data": img_b64}},
+                    {"text": prompt},
+                ],
             }],
-            "max_tokens": 1500
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 1500,
+            },
         }
 
         req = _urllib_req.Request(
-            "https://api.minimax.chat/v1/chat/completions",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "x-goog-api-key": api_key,
+                "content-type": "application/json",
             },
-            method="POST"
+            method="POST",
         )
 
-        with _urllib_req.urlopen(req, timeout=60) as resp:
+        with _urllib_req.urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read())
 
-        raw = result["choices"][0]["message"]["content"].strip()
-        # 容錯：移除可能的 ```json 包裝
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        # Gemini 回傳結構：candidates[0].content.parts[0].text
+        try:
+            raw = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError):
+            return jsonify({"error": f"Gemini 回應結構異常：{json.dumps(result)[:500]}"}), 502
+
+        # 容錯：移除可能的 ```json 包裝（responseMimeType=application/json 時通常不會有）
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1] if "```" in raw[3:] else raw
+            if raw.lower().startswith("json"):
+                raw = raw[4:].lstrip()
+        raw = raw.replace("```", "").strip()
         parsed = json.loads(raw)
         return jsonify(parsed)
 
+    except _urllib_err.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        return jsonify({"error": f"Gemini API HTTP {e.code}: {body[:500]}"}), 502
     except json.JSONDecodeError as e:
         return jsonify({"error": f"回傳格式解析失敗：{e}\n原始：{raw[:300]}"}), 500
     except Exception as e:
