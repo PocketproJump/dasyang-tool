@@ -351,7 +351,7 @@ async function analyzeDesign(){
             {inline_data:{mime_type:_aiImageType,data:_aiImageB64}},
             {text:prompt}
           ]}],
-          generationConfig:{responseMimeType:'application/json',maxOutputTokens:1500}
+          generationConfig:{responseMimeType:'application/json',maxOutputTokens:4096,thinkingConfig:{thinkingBudget:0}}
         })
       });
       if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`HTTP ${res.status}`);}

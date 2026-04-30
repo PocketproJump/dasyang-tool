@@ -649,7 +649,10 @@ def analyze_route():
             }],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "maxOutputTokens": 1500,
+                "maxOutputTokens": 4096,
+                # Gemini 2.5 系列預設會花 tokens 在 thinking 上，
+                # 結構化抽取任務不需要思考，關掉避免吃掉輸出額度
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
 
